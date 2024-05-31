@@ -26,3 +26,21 @@ jobs:
 
     - name: Run Tests
       run: ctest --test-dir build
+
+    ## Build Singularity container
+    - name: Install Singularity
+      run: |
+        if ! which singularity >/dev/null 2>&1; then
+          curl -sfL https://downloads.sylabs.io/singularity/latest/singularity-latest.tar.gz -o singularity.tar.gz
+          tar -xvf singularity.tar.gz
+          sudo mv singularity /usr/local/bin/
+        fi
+        
+    - name: Build Singularity container (Hello, world!)
+      run: singularity build hello-world.sif ./singularity.def
+
+    - name: Run Singularity container
+      run: singularity run hello-world.sif
+    
+
+      
