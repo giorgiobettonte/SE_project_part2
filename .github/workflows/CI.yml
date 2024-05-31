@@ -27,20 +27,67 @@ jobs:
     - name: Run Tests
       run: ctest --test-dir build
 
-    ## Build Singularity container
-    - name: Install Singularity
-      run: |
-        if ! which singularity >/dev/null 2>&1; then
-          curl -sfL https://downloads.sylabs.io/singularity/latest/singularity-latest.tar.gz -o singularity.tar.gz
-          tar -xvf singularity.tar.gz
-          sudo mv singularity /usr/local/bin/
-        fi
-        
-    - name: Build Singularity container (Hello, world!)
-      run: singularity build hello-world.sif ./singularity.def
+  build-test-containers:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/singularity/singularity:v3.8.3
+    strategy:
+      fail-fast: false
+      matrix:
+        recipe: ["Singularity.def"]
 
-    - name: Run Singularity container
-      run: singularity run hello-world.sif
-    
+    name: Check ${{ matrix.recipe }}
+    steps:
 
-      
+      - name: Check out code for the container build
+        uses: actions/checkout@v2
+
+      - name: Continue if Singularity Recipe Exists
+        run: |
+          if [[ -f "${{ matrix.recipe }}" ]]; then
+            echo "keepgoing=true" >> $GITHUB_ENV
+          fi          
+
+
+      - name: Build Container
+        if: ${{ env.keepgoing == 'true' }}
+        env:
+          recipe: ${{ matrix.recipe }}
+        run: |
+          ls 
+          if [ -f "${{ matrix.recipe }}" ]; then
+            sudo -E singularity build container.sif ${{ matrix.recipe }}
+            tag=$(echo "${recipe/Singularity\./}")
+            if [ "$tag" == "Singularity" ]; then
+                tag=latest
+            fi
+            # Build the container and name by tag
+            echo "Tag is $tag."
+            echo "tag=$tag" >> $GITHUB_ENV
+          else
+            echo "${{ matrix.recipe }} is not found."
+            echo "Present working directory: $PWD"
+            ls
+          fi
+      - name: Run Container
+        if: ${{ env.keepgoing == 'true' }}
+        run: |
+          singularity exec container.sif echo "Hello, Integration!"
+          singularity exec container.sif echo "Tag is $tag."
+          singularity exec container.sif echo "Present working directory: $PWD"
+          singularity exec container.sif ls
+
+
+      # - name: Login and Deploy Container
+      #   if: (github.event_name != 'pull_request')
+      #   env:
+      #     keepgoing: ${{ env.keepgoing }}
+      #   run: |         
+      #       if [[ "${keepgoing}" == "true" ]]; then
+      #           echo ${{ secrets.GITHUB_TOKEN }} | singularity remote login -u ${{ secrets.GHCR_USERNAME }} --password-stdin oras://ghcr.io
+      #           singularity push container.sif oras://ghcr.io/${GITHUB_REPOSITORY}:${tag}
+      #       fi
+
+
+
+  
